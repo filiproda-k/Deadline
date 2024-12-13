@@ -1,0 +1,22 @@
+body {
+    background-color: rgb(30, 30, 30);
+}
+
+.inputBox {
+    background-color: rgb(20, 20, 20);
+    border-radius: 10px;
+    position: fixed;
+    top: 100vh;
+    transform: translateY(-215px);
+    resize: none;
+    height: 200px;
+    width: 99%;
+    border-color: rgb(50, 50, 50);
+}
+
+.text {
+    color: white;
+    font-family: monospace;
+    text-shadow: rgb(255, 255, 255) 0 0 5px;
+    margin: 5px;
+}
