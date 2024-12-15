@@ -34,7 +34,7 @@ class Player {
         this.className = "Player"
 
         this.money = 5
-        this.energy = 30
+        this.energy = 24
         this.currentRoom = startRoom || "apartment"
 
         players.push(this)
@@ -257,7 +257,7 @@ player.interactions = [
             for (let i = 0; i < inventory.length; ++i) {
                 let item = inventory[i]
 
-                invLines.push("     " + item.id)
+                invLines.push("     " + item.identifier)
             }
 
             return writeMultipleLines(invLines)
@@ -461,6 +461,23 @@ player.interactions = [
 
             return writeLine("Theres no items here like that.")
         }
+    },
+
+    {
+        id: "check wallet",
+
+        condition: function(rawCommand, keywords) {
+            if (rawCommand == "check wallet" || rawCommand == "check money" || rawCommand == "how much money do i have") {
+                return true
+            }
+        },
+
+        action: function(rawCommand, keywords) {
+            return writeMultipleLines([
+                "You reach for your wallet in your pocket and open the flaps.",
+                "Inside you can see " + player.money.toString() + "$ in notes."
+            ])
+        }
     }
 ]
 
@@ -475,14 +492,14 @@ function readOutItems() {
             let currentItem = currentItems[0]
 
             if (currentItem) {
-                return writeLine("There is a " + currentItem.id + " laying nearby")
+                return writeLine("There is a " + currentItem.id + " laying nearby.")
             }
         }
 
         for (let i = 0; i < currentItems.length; ++i) {
             let currentItem = currentItems[i]
 
-            lines.push("There is a " + currentItem.id + " laying nearby")
+            lines.push("There is a " + currentItem.id + " laying nearby.")
         }
     }
 
@@ -589,8 +606,12 @@ function parse(command) {
                     time = 3000
                 }
 
-                if (player.energy <= 0) {
-                    setTimeout(writeLine, time, "Youre out of energy. You can come back to whatever you were doing tomorrow.")
+                if (player.energy <= 0 || player.isSleeping || currentTime > 23) {
+                    if (!player.isSleeping) {
+                        setTimeout(writeLine, time, "Youre out of energy. You can come back to whatever you were doing tomorrow.")
+                    } else if (currentTime > 23) {
+                        setTimeout(writeLine, time, "Its getting quite late by the way. Maybe you should leave this until tomorrow.")
+                    }
 
                     if (currentDayName == "Tuesday") {
                         gameEnding = 2
@@ -601,10 +622,6 @@ function parse(command) {
                     } else {
                         setTimeout(advanceDay, time + 3000)
                     }
-                } else if (currentTime > 23) {
-                    setTimeout(writeLine, time, "Its getting quite late by the way. Maybe you should leave this until tomorrow.")
-
-                    setTimeout(advanceDay, time + 3000)
                 }
 
                 return
@@ -1142,6 +1159,64 @@ apartmentComputer.interactions = [
     }
 ]
 
+let apartmentMattress = new Object()
+apartmentMattress.id = "Mattress"
+apartmentMattress.parent = apartment
+
+apartmentMattress.interactions = [
+    {
+        id: "sleep",
+
+        condition: function(keywords, rawCommand) {
+            if (rawCommand == "sleep" || rawCommand == "go to sleep" || rawCommand == "next day") {
+                return true
+            }
+        },
+
+        action: function(keywords, rawCommand) {
+            player.isSleeping = true
+
+            return writeMultipleLines([
+                "You lay down on your mattress.",
+                "After a few minutes you can feel yourself drifting off.",
+                "Tomorrow is another day."
+            ])
+        }
+    },
+
+    {
+        id: "clean",
+
+        condition: function(keywords, rawCommand) {
+            if (rawCommand == "clean mattress") {
+                return true
+            }
+        },
+
+        action: function(keywords, rawCommand) {
+            let playerItems = getItemsInRoom(player)
+
+            if (!apartmentMattress.isClean) {
+                if (playerItems.indexOf(cleaningEquipment) >=0 ) {
+                    apartmentMattress.isClean = true
+
+                    return writeMultipleLines([
+                        "You spray some fabric cleaner all over the mattress and scrub it until every little stain is gone.",
+                        "While its not perfect, itll be good enough for now.",
+                        "You can finally sleep clean at night."
+                    ])
+                } else {
+                    return writeLine("You've got nothing to clean this thing with. Maybe you can find something in the shop.")
+                }
+            } else {
+                apartmentMattress.isClean = true
+
+                return writeLine("The mattress is clean enough already.")
+            }
+        }
+    }
+]
+
 let friendApartment = AddRoom()
 friendApartment.id = "friend apartment"
 friendApartment.staticIdentifier = "You are in your friend's apartment."
@@ -1209,14 +1284,15 @@ friend.interactions = [
 
             if (playerItems.indexOf(evidenceDocument) >= 0 || player.submittedEvidence) {
                 lines.push("Hes already done his part of the work.")
-            } else if (friend.readyToCompileInfo) {
-                lines.push("Theres not much to talk about the terrorist anymore. Wait for him to compile the evidence document.")
             } else if (friendItems.indexOf(evidenceDocument) >= 0) {
                 evidenceDocument.parent = player
 
                 lines.push("'Alright man, here you go. Document with a bunch of evidence. You should prolly go to the station with this.' As he hands you the evidence of Marc Sollomans.")
                 lines.push("'Dude thank you so much. I owe you one for that.'")
                 lines.push("You should probably go to the station with this.")
+
+            } else if (friend.readyToCompileInfo) {
+                lines.push("Theres not much to talk about the terrorist anymore. Wait for him to compile the evidence document.")
 
             } else if (player.toldFriendAboutTerrorist) {
                 if (!(
@@ -1339,6 +1415,7 @@ friend.interactions = [
 
 let book = new Item()
 book.id = "Book"
+book.identifier = "A book titled 'The Anarchists Cookbook'."
 book.description = "The title reads 'The Anarchist's Cookbook'. The back cover is completely plain, and the book is covered in a faded dark blue."
 book.parent = apartment
 
@@ -1371,6 +1448,122 @@ store.nicknames = ["store", "shop"]
 store.exits = {
     "e": "street2"
 }
+
+store.interactions = [
+    {
+        id: "check items",
+
+        condition: function(keywords, rawCommand) {
+            if (rawCommand == "whats in stock" || rawCommand == "what to buy" || rawCommand == "check items" || rawCommand == "check stock") {
+                return true
+            }
+        },
+
+        action: function(keywords, rawCommand) {
+            let lines = [
+                "You walk through the isles in search of things to buy.",
+                "All you were able to come across was:"
+            ]
+
+            for (let i = 0; i < store.inventory.length; i ++) {
+                let currentItem = store.inventory[i]
+
+                lines.push("     " + currentItem.identifier + " Price: " + currentItem.price.toString() + "$")
+            }
+        }
+    },
+
+    {
+        id: "buy item",
+
+        condition: function(keywords, rawCommand) {
+            if (keywords[0] == "buy") {
+                return true
+            }
+        },
+
+        action: function(keywords, rawCommand) {
+            let itemName = ""
+
+            for (let i = 1; i < keywords.length; i ++) {
+                itemName += keywords[i] + " "
+            }
+
+            itemName = itemName.trim().toLowerCase()
+
+            let itemToBuy
+
+            for (let i = 0; i < store.inventory.length; i ++) {
+                let currentItem = store.inventory[i]
+
+                if (currentItem.id.trim().toLowerCase() == itemName) {
+                    itemToBuy = currentItem
+                }
+            }
+
+            if (itemToBuy.price <= player.money) {
+                player.money -= itemToBuy.price
+
+                itemToBuy.parent = player
+                store.inventory.splice(store.inventory.indexOf(itemToBuy), 1)
+
+                return writeMultipleLines([
+                    "Take the " + itemToBuy.id + " off of the shelf and check the price.",
+                    "The price tag reads '" + itemToBuy.price.toString() + "$'.",
+                    "Luckily youve got money to cover that.",
+                    "You go to the smiling cashier, who scans the " + itemToBuy.id + ".",
+                    "'Is that everything sir?' she says in a kind tone. 'Yes, thank you.' You reply timidly."
+                ])
+            } else {
+                return writeMultipleLines([
+                    "Take the " + itemToBuy.id + " off of the shelf and check the price.",
+                    "The price tag reads '" + itemToBuy.price.toString() + "$'.",
+                    "Youre too broke to buy that."
+                ])
+            }
+        }
+    }
+]
+
+let cleaningEquipment = new Item()
+cleaningEquipment.id = "Fabric Cleaner"
+cleaningEquipment.identifier = "A bottle of EasyShine Fabric Cleaner."
+cleaningEquipment.description = "The label says its made by EasyShine, a high quality cleaner company. I wouldnt doubt this one eating through fabric though. Who knows what they put in these."
+cleaningEquipment.price = 8
+
+let energyDrink = new Item()
+energyDrink.id = "RedBull",
+energyDrink.identifier = "A 250ml can of RedBull"
+energyDrink.description = "Flipping the can over, it says 160mg of caffeine. Should be enough to get you through the day."
+energyDrink.price = 3
+
+energyDrink.interactions = [
+    {
+        id: "consume",
+
+        condition: function(keywords, rawCommand) {
+            if (rawCommand == "drink redbull" || rawCommand == "drink energy drink") {
+                return true
+            }
+        },
+
+        action: function(keywords, rawCommand) {
+            player.energy += 5
+            energyDrink.parent = null
+
+            return writeMultipleLines([
+                "You pop the tab on the can of RedBull and take a sip.",
+                "The combination of caffeine and chemical flavour feel great.",
+                "Youre feeling very energetic."
+            ])
+        }
+    }
+]
+
+store.inventory = [
+    cleaningEquipment,
+    energyDrink
+]
 
 let govBuilding = AddRoom()
 govBuilding.id = "gov building"
