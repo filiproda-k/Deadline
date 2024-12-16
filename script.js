@@ -192,12 +192,37 @@ function advanceDay() {
         evidenceDocument.parent = friend
     }
 
-    writeMultipleLines([
+    let time = writeMultipleLines([
         "-----------------------",
     ])
 
-    setTimeout(readOutTime, 2000)
-    setTimeout(readOutSurroundings, 4000)
+    if (apartmentComputer.eMarktShipping.length > 0) {
+        let lines = [
+            "You are awoken by knocking.",
+            "'Hello, Anyone in there? Delivery!' The man at the door shouts.",
+            "Eventually he buggers off. You open the door to find a package containing:"
+        ]
+
+        for (let i = 0; i < apartmentComputer.eMarktShipping.length; i++) {
+            let currentItem = apartmentComputer.eMarktShipping[i]
+
+            currentItem.parent = apartment
+
+            lines.push("a " + currentItem.id)
+        }
+
+        apartmentComputer.eMarktShipping = []
+
+        time += setTimeout(writeMultipleLines, time, lines)
+    }
+
+    let moneyAdd = Math.round(Math.random() * 10)
+
+    time += setTimeout(readOutTime, time)
+    time += setTimeout(readOutSurroundings, time)
+    time += setTimeout(writeLine, time, "Your parents have given you " + moneyAdd.toString() + "$. Spend it wisely")
+
+    player.money += moneyAdd
 }
 
 function endGame() {
@@ -304,7 +329,7 @@ player.interactions = [
         id: "move to location",
 
         condition: function (keywords) {
-            if ((keywords[0] == "go" && keywords[1] == "to") || keywords[0] == "enter") {
+            if ((keywords[0] == "go" && keywords[1] == "to") || (keywords[0] == "go" && keywords[1] == "into") || keywords[0] == "enter") {
                 return true
             }
         },
@@ -430,6 +455,8 @@ player.interactions = [
         id: "take item",
 
         condition: function (keywords, rawCommand) {
+            console.log(keywords)
+
             if ((keywords[0] == "pick" && keywords[1] == "up") || keywords[0] == "take") {
                 return true
             }
@@ -466,13 +493,13 @@ player.interactions = [
     {
         id: "check wallet",
 
-        condition: function(rawCommand, keywords) {
+        condition: function (keywords, rawCommand) {
             if (rawCommand == "check wallet" || rawCommand == "check money" || rawCommand == "how much money do i have") {
                 return true
             }
         },
 
-        action: function(rawCommand, keywords) {
+        action: function (keywords, rawCommand) {
             return writeMultipleLines([
                 "You reach for your wallet in your pocket and open the flaps.",
                 "Inside you can see " + player.money.toString() + "$ in notes."
@@ -496,11 +523,19 @@ function readOutItems() {
             }
         }
 
+        let itemString = "There is "
+
         for (let i = 0; i < currentItems.length; ++i) {
             let currentItem = currentItems[i]
 
-            lines.push("There is a " + currentItem.id + " laying nearby.")
+            if (i == currentItems.length) {
+                itemString += "a " + currentItem.id + ", "
+            } else {
+                itemString += "and a " + currentItem.id + " laying nearby. "
+            }
         }
+
+        return writeLine(itemString)
     }
 
     return writeMultipleLines(lines)
@@ -529,14 +564,14 @@ function getDirection(direction) {
 gameEnding = null
 
 function parse(command) {
-    command = command.trim()
+    command = command.trim().toLowerCase()
 
     let keywords = command.split(" ")
 
     for (let i = 0; i < keywords.length; ++i) {
         let currentWord = keywords[i]
 
-        if (currentWord == "the" || currentWord == "him" || currentWord == "some" || currentWord == "for" || currentWord == "into") {
+        if (currentWord == "the" || currentWord == "him" || currentWord == "some" || currentWord == "for") {
             keywords.splice(i, 1)
 
             --i
@@ -579,6 +614,12 @@ function parse(command) {
         commandAreas.push(npcsInRoom[i])
     }
 
+    let itemsInRoom = getItemsInRoom(player)
+
+    for (let i = 0; i < npcsInRoom.length; ++i) {
+        commandAreas.push(npcsInRoom[i])
+    }
+
     commandAreas.push(player)
 
     for (let i = 0; i < commandAreas.length; ++i) {
@@ -597,7 +638,11 @@ function parse(command) {
         for (let j = 0; j < areaInteractions.length; j++) {
             let currentInteraction = areaInteractions[j]
 
+            console.log(keywords)
+
             let condition = currentInteraction.condition(keywords, command)
+
+            console.log(currentInteraction.id, condition)
 
             if (condition) {
                 let time = currentInteraction.action(keywords, command)
@@ -756,6 +801,33 @@ apartment.exits = {
     "s": "street15"
 }
 
+let book = new Item()
+book.id = "Book"
+book.identifier = "A book titled 'The Anarchists Cookbook'."
+book.description = "The title reads 'The Anarchist's Cookbook'. The back cover is completely plain, and the book is covered in a faded dark blue."
+book.parent = apartment
+book.interactions = [
+    {
+        id: "read",
+
+        condition: function (keywords, rawCommand) {
+            if (rawCommand == "read book" || rawCommand == "read") {
+                if (book.parent == player) {
+                    return true
+                }
+            }
+        },
+
+        action: function (keywords, rawCommand) {
+            writeMultipleLines([
+                "You turn to the first page of the book, the index.",
+                "There are about 100 chapters of various ways to cause anarchy, including the manufacture of explosives, how to create dangerous chemicals, etc.",
+                "You dont have enough time to read the book right now. There are more important things to do."
+            ])
+        }
+    }
+]
+
 let apartmentComputer = new Object()
 apartmentComputer.id = "apartment computer"
 apartmentComputer.parent = apartment
@@ -788,7 +860,7 @@ apartmentComputer.lookerUpperEntries = [
         name: "Sully Hall",
         age: 35,
         address: "83 Firth Boulevard GF9 24B",
-        company: "Tesco",
+        company: "Walmart",
         employeeNumber: 244995
     },
 
@@ -818,6 +890,39 @@ apartmentComputer.lookerUpperEntries = [
 ]
 
 apartmentComputer.currentLookerUpperEntry = 2
+
+let fakeGunLicense = new Item()
+fakeGunLicense.id = "License card"
+fakeGunLicense.identifier = "fake gun license."
+fakeGunLicense.description = "A fabricated permit for owning a firearm. This could be useful."
+fakeGunLicense.price = 20
+
+let bagOfFent = new Item()
+bagOfFent.id = "Baggy"
+bagOfFent.identifier = "baggy of fentanyl."
+bagOfFent.description = "Its a small plastic bag filled with MDMA crystals cut with fent. Why in the hell would you want this??"
+bagOfFent.price = 15
+
+let grinder = new Item()
+grinder.id = "Grinder"
+grinder.identifier = "grinder for various substances."
+grinder.description = "The handle is nearly falling off but its good enough for grinding up. You never know when this'll come in handy."
+grinder.price = 10
+
+let cart = new Item()
+cart.id = "Cali Cart"
+cart.identifier = "Cali cart."
+cart.description = "This is a disposable vaporiser which contains THC juice. It might be cut with vitamin E acetate, so I wouldnt if I were you."
+cart.price = 18
+
+apartmentComputer.eMarktInventory = [
+    fakeGunLicense,
+    bagOfFent,
+    grinder,
+    cart
+]
+
+apartmentComputer.eMarktShipping = []
 
 apartmentComputer.interactions = [
     {
@@ -1135,6 +1240,86 @@ apartmentComputer.interactions = [
     },
 
     {
+        id: "access eMarkt",
+
+        condition: function (keywords, rawCommand) {
+            if (rawCommand == "go on emarkt" || rawCommand == "click on emarkt" || rawCommand == "access emarkt" || rawCommand == "click emarkt") {
+                if (apartmentComputer.on && apartmentComputer.page == "Browser") {
+                    return true
+                }
+            }
+        },
+
+        action: function (keywords, rawCommand) {
+            if (apartmentComputer.page == "eMarkt") {
+                return writeLine("Youre already on eMarkt")
+            }
+
+            apartmentComputer.page = "eMarkt"
+
+            let lines = [
+                "You click on the eMarkt bookmark.",
+                "A bright white page opens up, and " + apartmentComputer.eMarktInventory.length.toString() + " item listings show up."
+            ]
+
+            for (let i = 0; i < apartmentComputer.eMarktInventory.length; i++) {
+                let currentItem = apartmentComputer.eMarktInventory[i]
+
+                lines.push(currentItem.identifier + " Price: " + currentItem.price.toString() + "$.")
+            }
+
+            return writeMultipleLines(lines)
+        }
+    },
+
+    {
+        id: "buy on eMarkt",
+
+        condition: function (keywords, rawCommand) {
+            if (keywords[0] == "buy" && apartmentComputer.page == "eMarkt" && apartmentComputer.on) {
+                return true
+            }
+        },
+
+        action: function (keywords, rawCommand) {
+            let itemName = ""
+
+            for (let i = 1; i < keywords.length; i++) {
+                itemName += keywords[i] + " "
+            }
+
+            itemName = itemName.trim().toLowerCase()
+
+            let itemToBuy
+
+            for (let i = 0; i < apartmentComputer.eMarktInventory.length; i++) {
+                let currentItem = apartmentComputer.eMarktInventory[i]
+
+                if (currentItem.identifier.trim().toLowerCase().match(itemName)) {
+                    itemToBuy = currentItem
+                }
+            }
+
+            if (itemToBuy.price <= player.money) {
+                apartmentComputer.eMarktShipping.push(itemToBuy)
+                apartmentComputer.eMarktInventory.splice(apartmentComputer.eMarktInventory.indexOf(itemToBuy), 1)
+
+                return writeMultipleLines([
+                    "You click on the listing for " + itemToBuy.identifier + ".",
+                    "Luckily the price is within your budget. You click on the buy now button and enter your shipping and billing info.",
+                    "It should arrive by tomorrow."
+                ])
+            } else {
+                return writeMultipleLines([
+                    "You click on the listing for " + itemToBuy.identifier + ".",
+                    "Unfortunately youre short by a few dollars.",
+                    "Try again tomorrow."
+                ])
+            }
+        }
+    },
+
+    {
         id: "shut down computer",
 
         condition: function (keywords, rawCommand) {
@@ -1167,13 +1352,13 @@ apartmentMattress.interactions = [
     {
         id: "sleep",
 
-        condition: function(keywords, rawCommand) {
+        condition: function (keywords, rawCommand) {
             if (rawCommand == "sleep" || rawCommand == "go to sleep" || rawCommand == "next day") {
                 return true
             }
         },
 
-        action: function(keywords, rawCommand) {
+        action: function (keywords, rawCommand) {
             player.isSleeping = true
 
             return writeMultipleLines([
@@ -1187,18 +1372,19 @@ apartmentMattress.interactions = [
     {
         id: "clean",
 
-        condition: function(keywords, rawCommand) {
+        condition: function (keywords, rawCommand) {
             if (rawCommand == "clean mattress") {
                 return true
             }
         },
 
-        action: function(keywords, rawCommand) {
+        action: function (keywords, rawCommand) {
             let playerItems = getItemsInRoom(player)
 
             if (!apartmentMattress.isClean) {
-                if (playerItems.indexOf(cleaningEquipment) >=0 ) {
+                if (playerItems.indexOf(cleaningEquipment) >= 0) {
                     apartmentMattress.isClean = true
+                    apartment.description = "Your computer sits upon a shoddy desk, with a disheveled mattress on the floor. There is an exit to the south."
 
                     return writeMultipleLines([
                         "You spray some fabric cleaner all over the mattress and scrub it until every little stain is gone.",
@@ -1413,12 +1599,6 @@ friend.interactions = [
     }
 ]
 
-let book = new Item()
-book.id = "Book"
-book.identifier = "A book titled 'The Anarchists Cookbook'."
-book.description = "The title reads 'The Anarchist's Cookbook'. The back cover is completely plain, and the book is covered in a faded dark blue."
-book.parent = apartment
-
 let library = AddRoom()
 library.id = "library"
 library.staticIdentifier = "You are in the Library."
@@ -1453,19 +1633,19 @@ store.interactions = [
     {
         id: "check items",
 
-        condition: function(keywords, rawCommand) {
+        condition: function (keywords, rawCommand) {
             if (rawCommand == "whats in stock" || rawCommand == "what to buy" || rawCommand == "check items" || rawCommand == "check stock") {
                 return true
             }
         },
 
-        action: function(keywords, rawCommand) {
+        action: function (keywords, rawCommand) {
             let lines = [
                 "You walk through the isles in search of things to buy.",
                 "All you were able to come across was:"
             ]
 
-            for (let i = 0; i < store.inventory.length; i ++) {
+            for (let i = 0; i < store.inventory.length; i++) {
                 let currentItem = store.inventory[i]
 
                 lines.push("     " + currentItem.identifier + " Price: " + currentItem.price.toString() + "$")
@@ -1476,16 +1656,16 @@ store.interactions = [
     {
         id: "buy item",
 
-        condition: function(keywords, rawCommand) {
+        condition: function (keywords, rawCommand) {
             if (keywords[0] == "buy") {
                 return true
             }
         },
 
-        action: function(keywords, rawCommand) {
+        action: function (keywords, rawCommand) {
             let itemName = ""
 
-            for (let i = 1; i < keywords.length; i ++) {
+            for (let i = 1; i < keywords.length; i++) {
                 itemName += keywords[i] + " "
             }
 
@@ -1493,7 +1673,7 @@ store.interactions = [
 
             let itemToBuy
 
-            for (let i = 0; i < store.inventory.length; i ++) {
+            for (let i = 0; i < store.inventory.length; i++) {
                 let currentItem = store.inventory[i]
 
                 if (currentItem.id.trim().toLowerCase() == itemName) {
@@ -1533,7 +1713,7 @@ cleaningEquipment.price = 8
 
 let energyDrink = new Item()
 energyDrink.id = "RedBull",
-energyDrink.identifier = "A 250ml can of RedBull"
+    energyDrink.identifier = "A 250ml can of RedBull"
 energyDrink.description = "Flipping the can over, it says 160mg of caffeine. Should be enough to get you through the day."
 energyDrink.price = 3
 
@@ -1541,13 +1721,13 @@ energyDrink.interactions = [
     {
         id: "consume",
 
-        condition: function(keywords, rawCommand) {
+        condition: function (keywords, rawCommand) {
             if (rawCommand == "drink redbull" || rawCommand == "drink energy drink") {
                 return true
             }
         },
 
-        action: function(keywords, rawCommand) {
+        action: function (keywords, rawCommand) {
             player.energy += 5
             energyDrink.parent = null
 
