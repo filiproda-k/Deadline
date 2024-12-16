@@ -33,7 +33,7 @@ class Player {
     constructor(startRoom) {
         this.className = "Player"
 
-        this.money = 5
+        this.money = 50
         this.energy = 24
         this.currentRoom = startRoom || "apartment"
 
@@ -192,9 +192,11 @@ function advanceDay() {
         evidenceDocument.parent = friend
     }
 
-    let time = writeMultipleLines([
+    writeMultipleLines([
         "-----------------------",
     ])
+
+    let timeOffset = 3000
 
     if (apartmentComputer.eMarktShipping.length > 0) {
         let lines = [
@@ -213,14 +215,16 @@ function advanceDay() {
 
         apartmentComputer.eMarktShipping = []
 
-        time += setTimeout(writeMultipleLines, time, lines)
+        setTimeout(writeMultipleLines, timeOffset, lines)
+
+        timeOffset += 12000
     }
 
     let moneyAdd = Math.round(Math.random() * 10)
 
-    time += setTimeout(readOutTime, time)
-    time += setTimeout(readOutSurroundings, time)
-    time += setTimeout(writeLine, time, "Your parents have given you " + moneyAdd.toString() + "$. Spend it wisely")
+    setTimeout(readOutTime, timeOffset)
+    setTimeout(readOutSurroundings, timeOffset + 3000)
+    setTimeout(writeLine, timeOffset + 8000, "Your parents have given you " + moneyAdd.toString() + "$. Spend it wisely")
 
     player.money += moneyAdd
 }
@@ -293,7 +297,7 @@ player.interactions = [
         id: "move by direction (N,E,S,W)",
 
         condition: function (keywords) {
-            if (keywords[0] == "go" || keywords[0] == "move") {
+            if ((keywords[0] == "go" || keywords[0] == "move") && !keywords[1] == "on") {
                 return true
             }
         },
@@ -505,6 +509,37 @@ player.interactions = [
                 "Inside you can see " + player.money.toString() + "$ in notes."
             ])
         }
+    },
+
+    {
+        id: "hint",
+
+        condition: function (keywords, rawCommand) {
+            if (rawCommand == "hint" || rawCommand == "think" || rawCommand == "help") {
+                return true
+            }
+        },
+
+        action: function (keywords, rawCommand) {
+            let lines = ["You think so hard you can feel your blood boil."]
+            let hints = []
+
+            player.energy--
+
+            if (!player.toldFriendAboutTerrorist) {
+                hints.push("Maybe you should tell your friend about the terrorist")
+            } else if (!player.submittedEvidence) {
+                hints.push("Maybe you should tell the police about your evidence.")
+            }
+
+            if (hints.length > 0) {
+                lines.push(hints[Math.round(Math.random() * hints.length)])
+            } else {
+                lines.push("You cant think of anything right now.")
+            }
+
+            return writeMultipleLines(lines)
+        }
     }
 ]
 
@@ -528,7 +563,7 @@ function readOutItems() {
         for (let i = 0; i < currentItems.length; ++i) {
             let currentItem = currentItems[i]
 
-            if (i == currentItems.length) {
+            if (i < currentItems.length) {
                 itemString += "a " + currentItem.id + ", "
             } else {
                 itemString += "and a " + currentItem.id + " laying nearby. "
@@ -828,6 +863,40 @@ book.interactions = [
     }
 ]
 
+let cigarretes = new Item()
+cigarretes.id = "Pack of Cigarettes"
+cigarretes.identifier = "A pack of Marlboro Cigarettes."
+cigarretes.description = "The front reads Smoking Kills in a threatening manner."
+cigarretes.parent = apartment
+
+cigarretes.interactions = [
+    {
+        id: "smoke",
+
+        condition: function (keywords, rawCommand) {
+            if (rawCommand == "smoke" || rawCommand == "smoke cigarette" || rawCommand == "smoke cigarettes") {
+                return true
+            }
+        },
+
+        action: function (keywords, rawCommand) {
+            let inventoryItems = getItemsInRoom(player)
+
+            if (inventoryItems.indexOf(lighter) >= 0) {
+                player.energy++
+
+                return writeMultipleLines([
+                    "You take a cigarette out of the pack and light the end.",
+                    "It only takes you a few pulls before the cigarette is finished.",
+                    "Youre feeling awake and focused."
+                ])
+            } else {
+                return writeLine("You dont have a lighter.")
+            }
+        }
+    }
+]
+
 let apartmentComputer = new Object()
 apartmentComputer.id = "apartment computer"
 apartmentComputer.parent = apartment
@@ -900,7 +969,7 @@ fakeGunLicense.price = 20
 let bagOfFent = new Item()
 bagOfFent.id = "Baggy"
 bagOfFent.identifier = "baggy of fentanyl."
-bagOfFent.description = "Its a small plastic bag filled with MDMA crystals cut with fent. Why in the hell would you want this??"
+bagOfFent.description = "Its a small plastic bag filled with fent-laced crystal methamphetamine. Why in the hell would you want this??"
 bagOfFent.price = 15
 
 let grinder = new Item()
@@ -914,6 +983,49 @@ cart.id = "Cali Cart"
 cart.identifier = "Cali cart."
 cart.description = "This is a disposable vaporiser which contains THC juice. It might be cut with vitamin E acetate, so I wouldnt if I were you."
 cart.price = 18
+cart.pullsLeft = 5
+
+cart.interactions = [
+    {
+        id: "hit cart",
+
+        condition: function (keywords, rawCommand) {
+            if (rawCommand == "hit cart" || rawCommand == "use cart" || rawCommand == "smoke cart") {
+                return true
+            }
+        },
+
+        function: function (keywords, rawCommand) {
+            if (cart.pullsLeft > 0) {
+                if (!player.fadednessLevel) {
+                    player.fadednessLevel = 0
+                }
+
+                player.fadednessLevel++
+                cart.pullsLeft--
+
+                let lines = [
+                    "You put the Cali cart to your lips and take a deep inhale.",
+                    "The chemicals in the smoke make it feel as if your lungs are being constricted.",
+                    "You almost cough but manage to firm it."
+                ]
+
+                if (player.fadednessLevel == 3) {
+                    lines.push("Youre beginning to feel slightly faded...")
+                } else if (player.fadednessLevel == 5) {
+                    lines.push("You are extremely faded now. You feel lightheaded and relaxed.")
+                }
+
+                return writeMultipleLines(lines)
+            } else {
+                return writeMultipleLines([
+                    "You put the Cali cart to your lips and take a deep inhale. However, no smoke comes out.",
+                    "Maybe its time to get a new cart."
+                ])
+            }
+        }
+    }
+]
 
 apartmentComputer.eMarktInventory = [
     fakeGunLicense,
@@ -1359,6 +1471,10 @@ apartmentMattress.interactions = [
         },
 
         action: function (keywords, rawCommand) {
+            if (apartmentComputer.on) {
+                return writeLine("You should turn the computer off first. Power bills aint cheap.")
+            }
+
             player.isSleeping = true
 
             return writeMultipleLines([
@@ -1712,10 +1828,16 @@ cleaningEquipment.description = "The label says its made by EasyShine, a high qu
 cleaningEquipment.price = 8
 
 let energyDrink = new Item()
-energyDrink.id = "RedBull",
-    energyDrink.identifier = "A 250ml can of RedBull"
+energyDrink.id = "RedBull"
+energyDrink.identifier = "A 250ml can of RedBull."
 energyDrink.description = "Flipping the can over, it says 160mg of caffeine. Should be enough to get you through the day."
 energyDrink.price = 3
+
+let lighter = new Item()
+lighter.id = "Lighter"
+lighter.identifier = "A lighter."
+lighter.description = "The flame is small but its good enough for daily applications."
+lighter.price = 2
 
 energyDrink.interactions = [
     {
@@ -1742,7 +1864,8 @@ energyDrink.interactions = [
 
 store.inventory = [
     cleaningEquipment,
-    energyDrink
+    energyDrink,
+    lighter
 ]
 
 let govBuilding = AddRoom()
