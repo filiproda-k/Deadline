@@ -1,5 +1,3 @@
-// game classes
-
 let rooms = []
 
 class Room {
