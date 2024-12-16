@@ -232,6 +232,8 @@ let currentDayName = days[currentDay]
 let currentTime = 8
 
 function endGame() {
+    gameFinished = true
+
     let lines = [
         "-----------------------"
     ]
@@ -271,7 +273,7 @@ player.interactions = [
         id: "check inventory",
 
         condition: function (keywords, rawCommand) {
-            if (keywords[0] == "check" && keywords[1] == "inventory") {
+            if (rawCommand.match("inventory")) {
                 return true
             }
         },
@@ -299,7 +301,7 @@ player.interactions = [
         id: "move by direction (N,E,S,W)",
 
         condition: function (keywords) {
-            if ((keywords[0] == "go" || keywords[0] == "move") && !(keywords[1] == "on")) {
+            if (keywords[0] == "go" || keywords[0] == "move") {
                 return true
             }
         },
@@ -335,7 +337,7 @@ player.interactions = [
         id: "move to location",
 
         condition: function (keywords) {
-            if ((keywords[0] == "go" && keywords[1] == "to") || (keywords[0] == "go" && keywords[1] == "into") || keywords[0] == "enter") {
+            if ((keywords[0] == "go" && (keywords[1] == "to" || keywords[1] == "into")) || keywords[0] == "enter") {
                 return true
             }
         },
@@ -359,7 +361,7 @@ player.interactions = [
 
             let room = ""
 
-            for (let i = roomIndex; i < 20; ++i) {
+            for (let i = roomIndex; i < keywords.length; ++i) {
                 if (!keywords[i]) {
                     continue
                 }
@@ -383,7 +385,7 @@ player.interactions = [
                     for (let nickIndex in roomData.nicknames) {
                         let nickname = roomData.nicknames[nickIndex]
 
-                        if (room == nickname) {
+                        if (nickname == room || room.match(nickname)) {
                             room = roomData.id
                             break
                         }
@@ -406,8 +408,8 @@ player.interactions = [
     {
         id: "exit current room",
 
-        condition: function (keywords) {
-            if (keywords[0] == "exit") {
+        condition: function (keywords, rawCommand) {
+            if (rawCommand.match("exit")) {
                 return true
             }
         },
@@ -447,7 +449,7 @@ player.interactions = [
         id: "check time",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "check the time" || rawCommand == "whats the time" || rawCommand == "check time") {
+            if (rawCommand.match("time")) {
                 return true
             }
         },
@@ -461,8 +463,6 @@ player.interactions = [
         id: "take item",
 
         condition: function (keywords, rawCommand) {
-            console.log(keywords)
-
             if ((keywords[0] == "pick" && keywords[1] == "up") || keywords[0] == "take") {
                 return true
             }
@@ -507,7 +507,7 @@ player.interactions = [
         id: "check wallet",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "check wallet" || rawCommand == "check money" || rawCommand == "how much money do i have") {
+            if (rawCommand.match("wallet") || rawCommand.match("money")) {
                 return true
             }
         },
@@ -524,7 +524,7 @@ player.interactions = [
         id: "hint",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "hint" || rawCommand == "think" || rawCommand == "help") {
+            if (rawCommand.match("hint") || rawCommand.match("think") || rawCommand.match("help")) {
                 return true
             }
         },
@@ -588,7 +588,13 @@ function readOutItems() {
 function readOutRoom() {
     let currentRoom = GetRoomById(player.currentRoom)
 
-    return writeLine(currentRoom.staticIdentifier + " " + currentRoom.description)
+    let time = writeLine(currentRoom.staticIdentifier + " " + currentRoom.description)
+
+    if (currentRoom.onEntry) {
+        time += setTimeout(currentRoom.onEntry, time)
+
+        return time
+    }
 }
 
 function readOutSurroundings() {
@@ -606,6 +612,7 @@ function getDirection(direction) {
 // parser
 
 gameEnding = null
+gameFinished = false
 
 function parse(command) {
     command = command.trim().toLowerCase()
@@ -827,7 +834,7 @@ function loopLine(line, text, i) {
 }
 
 document.addEventListener("keydown", function (input) {
-    if (input.key == "Enter" && canInput && !gameEnding) {
+    if (input.key == "Enter" && canInput && !gameFinished) {
         writeLine(inputBox.value, true)
         parse(inputBox.value)
 
@@ -857,7 +864,7 @@ book.interactions = [
         id: "read",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "read book" || rawCommand == "read") {
+            if (rawCommand.match("read") || rawCommand.match("inspect") || rawCommand.match("study")) {
                 if (book.parent == player) {
                     return true
                 }
@@ -879,30 +886,35 @@ cigarretes.id = "Pack of Cigarettes"
 cigarretes.identifier = "A pack of Marlboro Cigarettes."
 cigarretes.description = "The front reads Smoking Kills in a threatening manner."
 cigarretes.parent = apartment
+cigarretes.cigsLeft = 4
 
 cigarretes.interactions = [
     {
         id: "smoke",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "smoke" || rawCommand == "smoke cigarette" || rawCommand == "smoke cigarettes") {
+            if (rawCommand.match("smoke") || (rawCommand.match("use") && rawCommand.match("cig"))) {
                 return true
             }
         },
 
         action: function (keywords, rawCommand) {
-            let inventoryItems = getItemsInRoom(player)
+            if (cigarretes.cigsLeft > 0) {
+                let inventoryItems = getItemsInRoom(player)
 
-            if (inventoryItems.indexOf(lighter) >= 0) {
-                player.energy++
+                if (inventoryItems.indexOf(lighter) >= 0) {
+                    player.energy++
 
-                return writeMultipleLines([
-                    "You take a cigarette out of the pack and light the end.",
-                    "It only takes you a few pulls before the cigarette is finished.",
-                    "Youre feeling awake and focused."
-                ])
+                    return writeMultipleLines([
+                        "You take a cigarette out of the pack and light the end.",
+                        "It only takes you a few pulls before the cigarette is finished.",
+                        "Youre feeling awake and focused."
+                    ])
+                } else {
+                    return writeLine("You dont have a lighter.")
+                }
             } else {
-                return writeLine("You dont have a lighter.")
+                return writeLine("You have no cigarettes left.")
             }
         }
     }
@@ -1002,7 +1014,7 @@ cart.interactions = [
         id: "hit cart",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "hit cart" || rawCommand == "use cart" || rawCommand == "smoke cart") {
+            if ((rawCommand.match("hit") || rawCommand.match("use") || rawCommand.match("smoke")) && rawCommand.match("cart")) {
                 return true
             }
         },
@@ -1053,7 +1065,7 @@ apartmentComputer.interactions = [
         id: "use the computer",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "turn on computer" || rawCommand == "use computer" || rawCommand == "go on computer") {
+            if (((rawCommand.match("on") || rawCommand.match("use")) && ((rawCommand.match("pc") || rawCommand.match("computer")))) || (!apartmentComputer.on && (rawCommand.match("pc") || rawCommand.match("computer")))) {
                 return true
             }
         },
@@ -1078,7 +1090,7 @@ apartmentComputer.interactions = [
         id: "access browser",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "go back" || rawCommand == "go to browser") {
+            if (rawCommand.match("back") || (rawCommand.match("exit") && rawCommand.match(apartment.page))) {
                 if (apartmentComputer.on) {
                     return true
                 }
@@ -1100,7 +1112,7 @@ apartmentComputer.interactions = [
         id: "access livewire",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "go on livewire" || rawCommand == "click on livewire" || rawCommand == "click livewire" || rawCommand == "access livewire") {
+            if (rawCommand.match("livewire") || (rawCommand.match("live") && rawCommand.match("wire"))) {
                 if (apartmentComputer.on && apartmentComputer.page == "Browser") {
                     return true
                 }
@@ -1118,7 +1130,8 @@ apartmentComputer.interactions = [
                 "You click on the Livewire bookmark.",
                 "The screen goes a dark grey colour, and you see the large title fade in quickly, 'Livewire'.",
                 "The page then promptly opens up a profile page, someone called 'capital12'. There is a stream replay from not too long ago that you can watch.",
-                "This is the same stream where he was describing his plan to bomb the city."
+                "This is the same stream where he was describing his plan to bomb the city.",
+                "Maybe you should save this somehow as evidence..."
             ])
         }
     },
@@ -1127,7 +1140,7 @@ apartmentComputer.interactions = [
         id: "watch terrorists stream",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "watch stream" || rawCommand == "watch livestream" || rawCommand == "watch terrorists stream" || rawCommand == "watch terrorists livestream") {
+            if (rawCommand.match("watch")) {
                 if (apartmentComputer.on && apartmentComputer.page == "Livewire") {
                     return true
                 }
@@ -1162,7 +1175,7 @@ apartmentComputer.interactions = [
         id: "record terrorists stream",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "record stream" || rawCommand == "record livestream" || rawCommand == "record terrorists stream" || rawCommand == "record terrorists livestream") {
+            if (rawCommand.match("record") || rawCommand.match("collect") || rawCommand.match("save")) {
                 if (apartmentComputer.on && apartmentComputer.page == "Livewire") {
                     return true
                 }
@@ -1180,7 +1193,7 @@ apartmentComputer.interactions = [
                 "You take out your phone and record a solid 20 minutes of " + (player.terroristName && "Marc Solloman's" || "capital12's") + " livestream.",
                 "The recording contains evidence of him maniacally ranting about bombing the Greenfield Tower, your local government building.",
                 "He can also be seen weilding a rifle, making the threat much more serious.",
-                "You should definitely do something with this info."
+                "You should probably inform someone about your finding..."
             ])
         }
     },
@@ -1189,7 +1202,7 @@ apartmentComputer.interactions = [
         id: "access lookerupper",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "go on looker upper" || rawCommand == "go on lookerupper" || rawCommand == "click looker upper" || rawCommand == "click lookerupper" || rawCommand == "click on looker upper" || rawCommand == "click on lookerupper" || rawCommand == "access lookerupper" || rawCommand == "access looker upper") {
+            if (rawCommand.match("looker") && rawCommand.match("upper")) {
                 if (apartmentComputer.on && apartmentComputer.page == "Browser") {
                     return true
                 }
@@ -1214,7 +1227,7 @@ apartmentComputer.interactions = [
         id: "search for entry",
 
         condition: function (keywords, rawCommand) {
-            if ((keywords[0] == "search" || keywords[0] == "look") && apartmentComputer.on && apartmentComputer.page == "LookerUpper") {
+            if ((rawCommand.match("search") || rawCommand.match("look")) && apartmentComputer.on && apartmentComputer.page == "LookerUpper") {
                 return true
             }
         },
@@ -1232,7 +1245,7 @@ apartmentComputer.interactions = [
             for (let i = 0; i < apartmentComputer.lookerUpperEntries.length; ++i) {
                 let currentEntryData = apartmentComputer.lookerUpperEntries[i]
 
-                if (currentEntryData.name.toLowerCase().trim() == name.toLowerCase().trim()) {
+                if (name.toLowerCase().trim().match(currentEntryData.name.toLowerCase().trim())) {
                     entryData = currentEntryData
                     currentEntry = i
 
@@ -1275,7 +1288,7 @@ apartmentComputer.interactions = [
         id: "next entry",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "next entry" || rawCommand == "advance entry" || rawCommand == "go forwards" || rawCommand == "next person") {
+            if (rawCommand.match("next") || rawCommand.match("forward")) {
                 if (apartmentComputer.on && apartmentComputer.page == "LookerUpper") {
                     return true
                 }
@@ -1320,7 +1333,7 @@ apartmentComputer.interactions = [
         id: "last entry",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "last entry" || rawCommand == "go backwards" || rawCommand == "last person") {
+            if (rawCommand.match("last") || rawCommand.match("back")) {
                 if (apartmentComputer.on && apartmentComputer.page == "LookerUpper") {
                     return true
                 }
@@ -1367,7 +1380,7 @@ apartmentComputer.interactions = [
         id: "access eMarkt",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "go on emarkt" || rawCommand == "click on emarkt" || rawCommand == "access emarkt" || rawCommand == "click emarkt") {
+            if (rawCommand.match("emarkt") || rawCommand.match("market")) {
                 if (apartmentComputer.on && apartmentComputer.page == "Browser") {
                     return true
                 }
@@ -1400,45 +1413,48 @@ apartmentComputer.interactions = [
         id: "buy on eMarkt",
 
         condition: function (keywords, rawCommand) {
-            if (keywords[0] == "buy" && apartmentComputer.page == "eMarkt" && apartmentComputer.on) {
+            if ((rawCommand.match("buy") || rawCommand.match("purchase")) && apartmentComputer.page == "eMarkt" && apartmentComputer.on) {
                 return true
             }
         },
 
         action: function (keywords, rawCommand) {
             let itemName = ""
+            let itemToBuy
 
-            for (let i = 1; i < keywords.length; i++) {
+            for (let i = 1; i < keywords.length; i ++) {
                 itemName += keywords[i] + " "
             }
 
-            itemName = itemName.trim().toLowerCase()
-
-            let itemToBuy
+            itemName = itemName.trim()
 
             for (let i = 0; i < apartmentComputer.eMarktInventory.length; i++) {
                 let currentItem = apartmentComputer.eMarktInventory[i]
 
-                if (currentItem.identifier.trim().toLowerCase().match(itemName)) {
+                if (currentItem.identifier.toLowerCase().match(itemName)) {
                     itemToBuy = currentItem
                 }
             }
 
-            if (itemToBuy.price <= player.money) {
-                apartmentComputer.eMarktShipping.push(itemToBuy)
-                apartmentComputer.eMarktInventory.splice(apartmentComputer.eMarktInventory.indexOf(itemToBuy), 1)
+            if (itemToBuy) {
+                if (itemToBuy.price <= player.money) {
+                    apartmentComputer.eMarktShipping.push(itemToBuy)
+                    apartmentComputer.eMarktInventory.splice(apartmentComputer.eMarktInventory.indexOf(itemToBuy), 1)
 
-                return writeMultipleLines([
-                    "You click on the listing for " + itemToBuy.identifier + ".",
-                    "Luckily the price is within your budget. You click on the buy now button and enter your shipping and billing info.",
-                    "It should arrive by tomorrow."
-                ])
+                    return writeMultipleLines([
+                        "You click on the listing for " + itemToBuy.identifier + ".",
+                        "Luckily the price is within your budget. You click on the buy now button and enter your shipping and billing info.",
+                        "It should arrive by tomorrow."
+                    ])
+                } else {
+                    return writeMultipleLines([
+                        "You click on the listing for " + itemToBuy.identifier + ".",
+                        "Unfortunately youre short by a few dollars.",
+                        "Try again tomorrow."
+                    ])
+                }
             } else {
-                return writeMultipleLines([
-                    "You click on the listing for " + itemToBuy.identifier + ".",
-                    "Unfortunately youre short by a few dollars.",
-                    "Try again tomorrow."
-                ])
+                return writeLine("Theres no items like that.")
             }
         }
     },
@@ -1447,7 +1463,7 @@ apartmentComputer.interactions = [
         id: "shut down computer",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "turn off computer" || rawCommand == "shut down computer" || rawCommand == "close computer" || rawCommand == "stop using computer") {
+            if (((rawCommand.match("off") || rawCommand.match("stop using")) && ((rawCommand.match("pc") || rawCommand.match("computer")))) || (apartmentComputer.on && (rawCommand.match("pc") || rawCommand.match("computer")))) {
                 return true
             }
         },
@@ -1477,7 +1493,7 @@ apartmentMattress.interactions = [
         id: "sleep",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "sleep" || rawCommand == "go to sleep" || rawCommand == "next day") {
+            if (rawCommand.match("sleep") || rawCommand.match("next day")) {
                 return true
             }
         },
@@ -1501,7 +1517,7 @@ apartmentMattress.interactions = [
         id: "clean",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "clean mattress") {
+            if (rawCommand.match("clean")) {
                 return true
             }
         },
@@ -1554,7 +1570,7 @@ friend.interactions = [
         id: "ask for money",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "ask money" || rawCommand == "borrow money") {
+            if (rawCommand.match("money")) {
                 return true
             }
         },
@@ -1588,16 +1604,8 @@ friend.interactions = [
             let friendItems = getItemsInRoom(friend)
 
             if (
-                rawCommand == "tell about terrorist" ||
-                rawCommand == "tell about streamer" ||
-                rawCommand == "tell about explosion" ||
-                rawCommand == "talk about terrorist" ||
-                rawCommand == "talk about explosion" ||
-                rawCommand == "talk about streamer" ||
-                rawCommand == "talk to about terrorist" ||
-                rawCommand == "talk to about explosion" ||
-                rawCommand == "talk to about streamer" ||
-                (rawCommand == "collect evidence" && friendItems.indexOf(evidenceDocument) >= 0)
+                rawCommand.match("talk") || rawCommand.match("tell") || rawCommand.match("inform") ||
+                ((rawCommand.match("collect") || rawCommand.match("take")) && friendItems.indexOf(evidenceDocument) >= 0)
             ) {
                 return true
             }
@@ -1744,7 +1752,7 @@ let library = AddRoom()
 library.id = "library"
 library.staticIdentifier = "You are in the Library."
 library.entryIdentifier = "You have entered the Library."
-library.description = "Here you have endless access to books, printers, computers, whatever you may need! There is an exit to the west."
+library.description = "Here you have endless access to books, printers, computers, whatever you may need! There is an exit to the west. (THIS AREA CURRENTLY HAS NO USE)"
 library.nicknames = ["library", "bookstore"]
 library.exits = {
     "w": "street2"
@@ -1754,7 +1762,7 @@ let gunStore = AddRoom()
 gunStore.id = "gun store"
 gunStore.staticIdentifier = "You are in the Gun Store."
 gunStore.entryIdentifier = "You have entered the Gun Store."
-gunStore.description = "With a suitable gun license, you can purchase any firearm your heart desires! if you have money of course... There is an exit to the west."
+gunStore.description = "With a suitable gun license, you can purchase any firearm your heart desires! if you have money of course... There is an exit to the west. (THIS AREA CURRENTLY HAS NO USE)"
 gunStore.nicknames = ["store", "gun shop", "shop"]
 gunStore.exits = {
     "w": "street6"
@@ -1770,79 +1778,72 @@ store.exits = {
     "e": "street2"
 }
 
+store.onEntry = function() {
+    let lines = [
+        "You walk through the isles in search of things to buy.",
+        "All you were able to come across was:"
+    ]
+
+    for (let i = 0; i < store.inventory.length; i++) {
+        let currentItem = store.inventory[i]
+
+        lines.push("     " + currentItem.identifier + " Price: " + currentItem.price.toString() + "$")
+    }
+
+    return writeMultipleLines(lines)
+}
+
 store.interactions = [
-    {
-        id: "check items",
-
-        condition: function (keywords, rawCommand) {
-            if (rawCommand == "whats in stock" || rawCommand == "what to buy" || rawCommand == "check items" || rawCommand == "check stock") {
-                return true
-            }
-        },
-
-        action: function (keywords, rawCommand) {
-            let lines = [
-                "You walk through the isles in search of things to buy.",
-                "All you were able to come across was:"
-            ]
-
-            for (let i = 0; i < store.inventory.length; i++) {
-                let currentItem = store.inventory[i]
-
-                lines.push("     " + currentItem.identifier + " Price: " + currentItem.price.toString() + "$")
-            }
-
-            return writeMultipleLines(lines)
-        }
-    },
-
     {
         id: "buy item",
 
         condition: function (keywords, rawCommand) {
-            if (keywords[0] == "buy") {
+            if (rawCommand.match("buy") || rawCommand.match("purchase")) {
                 return true
             }
         },
 
         action: function (keywords, rawCommand) {
             let itemName = ""
+            let itemToBuy
 
-            for (let i = 1; i < keywords.length; i++) {
+            for (let i = 1; i < keywords.length; i ++) {
                 itemName += keywords[i] + " "
             }
 
-            itemName = itemName.trim().toLowerCase()
-
-            let itemToBuy
+            itemName = itemName.trim()
 
             for (let i = 0; i < store.inventory.length; i++) {
                 let currentItem = store.inventory[i]
 
-                if (currentItem.id.trim().toLowerCase() == itemName) {
+                if (currentItem.identifier.trim().toLowerCase().match(itemName)) {
                     itemToBuy = currentItem
                 }
             }
 
-            if (itemToBuy.price <= player.money) {
-                player.money -= itemToBuy.price
+            if (itemToBuy) {
+                if (itemToBuy.price <= player.money) {
+                    player.money -= itemToBuy.price
 
-                itemToBuy.parent = player
-                store.inventory.splice(store.inventory.indexOf(itemToBuy), 1)
+                    itemToBuy.parent = player
+                    store.inventory.splice(store.inventory.indexOf(itemToBuy), 1)
 
-                return writeMultipleLines([
-                    "You take the " + itemToBuy.id + " off of the shelf and check the price.",
-                    "The price tag reads '" + itemToBuy.price.toString() + "$'.",
-                    "Luckily youve got money to cover that.",
-                    "You go to the smiling cashier, who scans the " + itemToBuy.id + ".",
-                    "'Is that everything sir?' she says in a kind tone. 'Yes, thank you.' You reply timidly."
-                ])
+                    return writeMultipleLines([
+                        "You take the " + itemToBuy.id + " off of the shelf and check the price.",
+                        "The price tag reads '" + itemToBuy.price.toString() + "$'.",
+                        "Luckily youve got money to cover that.",
+                        "You go to the smiling cashier, who scans the " + itemToBuy.id + ".",
+                        "'Is that everything sir?' she says in a kind tone. 'Yes, thank you.' You reply timidly."
+                    ])
+                } else {
+                    return writeMultipleLines([
+                        "Take the " + itemToBuy.id + " off of the shelf and check the price.",
+                        "The price tag reads '" + itemToBuy.price.toString() + "$'.",
+                        "Youre too broke to buy that."
+                    ])
+                }
             } else {
-                return writeMultipleLines([
-                    "Take the " + itemToBuy.id + " off of the shelf and check the price.",
-                    "The price tag reads '" + itemToBuy.price.toString() + "$'.",
-                    "Youre too broke to buy that."
-                ])
+                return writeLine("They dont sell that here.")
             }
         }
     }
@@ -1865,7 +1866,7 @@ energyDrink.interactions = [
         id: "consume",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "drink redbull" || rawCommand == "drink energy drink") {
+            if (rawCommand.match("drink") || rawCommand.match("consume") || rawCommand.match("use") || rawCommand.match("driopennk")) {
                 return true
             }
         },
@@ -1910,24 +1911,30 @@ govBuilding.interactions = [
         id: "warn people",
 
         condition: function(keywords, rawCommand) {
-            if (rawCommand == "warn people about terrorist" || rawCommand == "tell people about terrorist" || rawCommand == "warn people about explosion" || rawCommand == "tell people about explosion"){
+            if (rawCommand.match("warn") || rawCommand.match("tell") || rawCommand.match("tell")){
                 return true
             }
         },
 
         action: function(keywords, rawCommand) {
-            return writeMultipleLines([
-                "You walk up to the receptionist.",
-                "'Hey, uhm. I need to warn you about something.' You say,",
-                "'Yep, how can I help?' The clueless receptionist replies.",
-                "'Ive been doing some digging online, and, well, Someone is going to blow this place up on Wednesday.'",
-                "'Sorry?' She thinks youre crazy.",
-                (player.hasPictureOfTerroristStream || player.knowsTerroristAddress) && "'Someone is going to blow this place up. I have valid evidence to prove my claim!'" || "'Someone is going to blow this place up you need to believe me!'",
-                "'Sir, Im sorry but your going to need to leave. I know what youre saying sounds serious but if this is a legitimate problem then report it to the police.'",
-                "'Please just listen. This is serious!' Youre about to get kicked out.",
-                "'Sir I wont hesitate to call security.'",
-                "You give a sigh of defeat as you walk out. They wont listen to you."
-            ])
+            if (!player.warnedGovBuilding) {
+                return writeLine("You've already tried to warn them. They wont listen.")
+            } else {
+                player.warnedGovBuilding = true
+
+                return writeMultipleLines([
+                    "You walk up to the receptionist.",
+                    "'Hey, uhm. I need to warn you about something.' You say,",
+                    "'Yep, how can I help?' The clueless receptionist replies.",
+                    "'Ive been doing some digging online, and, well, Someone is going to blow this place up on Wednesday.'",
+                    "'Sorry?' She thinks youre crazy.",
+                    (player.hasPictureOfTerroristStream || player.knowsTerroristAddress) && "'Someone is going to blow this place up. I have valid evidence to prove my claim!'" || "'Someone is going to blow this place up you need to believe me!'",
+                    "'Sir, Im sorry but your going to need to leave. I know what youre saying sounds serious but if this is a legitimate problem then report it to the police.'",
+                    "'Please just listen. This is serious!' Youre about to get kicked out.",
+                    "'Sir I wont hesitate to call security.'",
+                    "You give a sigh of defeat as you walk out. They wont listen to you."
+                ])
+            }
         }
     }
 ]
@@ -1947,7 +1954,7 @@ police.interactions = [
         id: "hand over evidence",
 
         condition: function (keywords, rawCommand) {
-            if (rawCommand == "hand over evidence" || rawCommand == "give evidence" || rawCommand == "turn in evidence") {
+            if (rawCommand.match("give") || rawCommand.match("turn in") || rawCommand.match("hand in") || rawCommand.match("talk") || rawCommand.match("tell") || rawCommand.match("warn")) {
                 return true
             }
         },
@@ -1969,7 +1976,7 @@ police.interactions = [
                     "'Alright, thank you. That should be everything. The detectives will keep their eyes peeled.'",
                 ])
             } else {
-                return writeLine("You dont have any evidence to hand in.")
+                return writeLine("You dont have any evidence to hand in. At least, legitimised evidence.")
             }
         }
     }
