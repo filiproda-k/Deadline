@@ -780,7 +780,7 @@ function writeLine(text, isUserInput) {
         totalTime += timeout
     }
 
-    if (outputBox.childElementCount > 25) {
+    if (outputBox.childElementCount > 16) {
         scrollOutput()
     }
 
